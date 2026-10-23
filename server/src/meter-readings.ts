@@ -69,8 +69,12 @@ export function meterReadingRouter(pool: Pool) {
       const meter = meterResult.rows[0];
       if (!meter) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Active meter not found.' }); }
 
+      const todayResult = await client.query("SELECT (now() AT TIME ZONE 'Asia/Jakarta')::date::text AS today");
+      if (readingDate > todayResult.rows[0].today) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Future-dated meter readings are not allowed.' }); }
       const existing = await client.query('SELECT id FROM meter_readings WHERE meter_id=$1 AND reading_date=$2', [meterId, readingDate]);
       if (existing.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'A reading already exists for this meter and date. Use the audited correction workflow instead.' }); }
+      const later = await client.query('SELECT id FROM meter_readings WHERE meter_id=$1 AND reading_date>$2 LIMIT 1', [meterId, readingDate]);
+      if (later.rowCount) { await client.query('ROLLBACK'); return res.status(409).json({ error: 'A later reading already exists. Historical changes require an audited correction workflow.' }); }
 
       const previousResult = await client.query(
         `SELECT verified_reading, reading_date FROM meter_readings
@@ -82,15 +86,14 @@ export function meterReadingRouter(pool: Pool) {
       let consumption: string | null = null;
       let status: 'baseline' | 'pending_review' | 'requires_review' = 'pending_review';
       if (!hasBaseline) status = 'baseline';
-      else if (Number(verifiedReading) < Number(previousValue)) status = 'requires_review';
       else {
-        const multiplier = Number(meter.multiplier);
-        const quantity = (Number(verifiedReading) - Number(previousValue)) * multiplier;
-        if (!Number.isFinite(quantity) || !Number.isFinite(multiplier) || multiplier <= 0) {
-          await client.query('ROLLBACK');
-          return res.status(422).json({ error: 'Meter multiplier or calculated consumption is invalid.' });
+        const comparison = await client.query('SELECT ($1::numeric < $2::numeric) AS is_lower', [verifiedReading, previousValue]);
+        if (comparison.rows[0].is_lower) status = 'requires_review';
+        else {
+          const quantityResult = await client.query('SELECT (($1::numeric - $2::numeric) * $3::numeric)::numeric(20,6)::text AS quantity', [verifiedReading, previousValue, meter.multiplier]);
+          consumption = quantityResult.rows[0]?.quantity ?? null;
+          if (consumption === null) { await client.query('ROLLBACK'); return res.status(422).json({ error: 'Unable to calculate meter consumption.' }); }
         }
-        consumption = quantity.toFixed(6);
       }
 
       const rateResult = await client.query(
@@ -102,8 +105,8 @@ export function meterReadingRouter(pool: Pool) {
       const rate = rateResult.rows[0];
       let cost: string | null = null;
       if (consumption !== null && rate) {
-        const amount = Number(consumption) * Number(rate.rate_per_unit);
-        if (Number.isFinite(amount)) cost = amount.toFixed(2);
+        const amount = await client.query('SELECT ($1::numeric * $2::numeric)::numeric(20,2)::text AS amount', [consumption, rate.rate_per_unit]);
+        cost = amount.rows[0]?.amount ?? null;
       }
       if (status === 'pending_review' && !rate) status = 'requires_review';
       const key = `${new Date().getUTCFullYear()}/${randomUUID()}`;
