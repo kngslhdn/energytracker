@@ -1,6 +1,7 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import type { Pool } from 'pg';
+import rateLimit from 'express-rate-limit';
 
 const SESSION_COOKIE = 'et_session';
 const SESSION_HOURS = 12;
@@ -42,7 +43,7 @@ export function authRouter(pool: Pool) {
     } catch (error) { await client.query('ROLLBACK'); if ((error as {code?:string}).code === '23505') return res.status(409).json({ error: 'Username already exists.' }); return res.status(500).json({ error: 'Unable to create initial admin.' }); }
     finally { client.release(); }
   });
-  router.post('/login', async (req, res) => {
+  router.post('/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false }), async (req, res) => {
     const { username, password } = req.body || {};
     if (typeof username !== 'string' || typeof password !== 'string' || username.length > 48 || password.length > 256) return res.status(400).json({ error: 'Username and password are required.' });
     try {
