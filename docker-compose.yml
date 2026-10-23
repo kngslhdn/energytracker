@@ -24,6 +24,7 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://energytracker:${POSTGRES_PASSWORD:-dev_only_change_me}@db:5432/energytracker
       SESSION_SECRET: ${SESSION_SECRET:-local-development-secret-change-before-deploy-123456}
+      BOOTSTRAP_ADMIN_TOKEN: ${BOOTSTRAP_ADMIN_TOKEN:-}
       CORS_ORIGIN: http://localhost:5173
       STORAGE_ROOT: /app/storage
       TZ: Asia/Jakarta
