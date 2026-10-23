@@ -95,7 +95,7 @@ export function checklistRouter(pool: Pool) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'The selected checklist template or shift is inactive or unavailable.' });
       }
-      const itemMap = new Map<string, any>(items.rows.map((item: any) => [item.id, item]));
+      const itemMap = new Map<string, any>(items.rows.map((item: any) => [String(item.id), item] as [string, any]));
       const seen = new Set<string>();
       const normalized: any[] = [];
       for (const response of responses) {
