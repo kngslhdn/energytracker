@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: energytracker
+      POSTGRES_USER: energytracker
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_only_change_me}
+      TZ: Asia/Jakarta
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./server/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U energytracker -d energytracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks: [internal]
+  api:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      PORT: 3000
+      DATABASE_URL: postgresql://energytracker:${POSTGRES_PASSWORD:-dev_only_change_me}@db:5432/energytracker
+      SESSION_SECRET: ${SESSION_SECRET:-local-development-secret-change-before-deploy-123456}
+      CORS_ORIGIN: http://localhost:5173
+      STORAGE_ROOT: /app/storage
+      TZ: Asia/Jakarta
+    volumes:
+      - ./server:/app
+      - ./storage:/app/storage
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal]
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_BASE: http://localhost:3000/api
+    volumes:
+      - ./web:/app
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on: [api]
+networks:
+  internal:
+    driver: bridge
+volumes:
+  pgdata:
