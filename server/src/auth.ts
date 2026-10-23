@@ -74,7 +74,7 @@ export function authRouter(pool: Pool) {
   return router;
 }
 
-export async function requireRole(pool: Pool, allowed: string[]) {
+export function requireRole(pool: Pool, allowed: string[]) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const token = getCookie(req, SESSION_COOKIE);
     if (!token) return res.status(401).json({ error: 'Authentication required.' });
