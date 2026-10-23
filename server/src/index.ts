@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import pg from 'pg';
 import { authRouter } from './auth.js';
 import { meterReadingRouter } from './meter-readings.js';
+import { requireRole } from './auth.js';
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -19,7 +20,7 @@ app.get('/api/health', async (_req, res) => {
   try { await pool.query('SELECT 1'); res.json({ ok: true, service: 'energytracker-api', database: 'connected' }); }
   catch { res.status(503).json({ ok: false, service: 'energytracker-api', database: 'unavailable' }); }
 });
-app.get('/api/meters', async (_req, res) => {
+app.get('/api/meters', requireRole(pool, ['engineer', 'supervisor', 'admin']), async (_req, res) => {
   try { const result = await pool.query('SELECT id, code, name, utility_type, unit, multiplier, is_active FROM meters WHERE is_active = true ORDER BY code'); res.json(result.rows); }
   catch { res.status(500).json({ error: 'Unable to load meters. Apply the database migration first.' }); }
 });
