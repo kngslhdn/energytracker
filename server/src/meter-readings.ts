@@ -136,9 +136,10 @@ export function meterReadingRouter(pool: Pool) {
   });
 
   router.get('/:id/photo', requireRole(pool, ['engineer', 'supervisor', 'admin']), async (req, res) => {
-    if (!/^[0-9a-f-]{36}$/i.test(req.params.id)) return res.status(400).json({ error: 'Invalid reading id.' });
+    const readingId = String(req.params.id);
+    if (!/^[0-9a-f-]{36}$/i.test(readingId)) return res.status(400).json({ error: 'Invalid reading id.' });
     try {
-      const result = await pool.query('SELECT photo_storage_key FROM meter_readings WHERE id=$1', [req.params.id]);
+      const result = await pool.query('SELECT photo_storage_key FROM meter_readings WHERE id=$1', [readingId]);
       if (!result.rows[0]) return res.status(404).json({ error: 'Reading not found.' });
       const key = String(result.rows[0].photo_storage_key);
       const target = path.resolve(storageRoot, key);
